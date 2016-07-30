@@ -42,16 +42,14 @@ fn main() {
     let writer = tweets.clone();
 
     thread::spawn(move || {
-        let mut tweets = writer.lock().unwrap();
-        tweets.push_back("hello".to_owned());
+        twitter::get_timeline(access_token.to_string(), writer);
     });
 
     let chain = Chain::new(move |_: &mut Request| {
         let tweets = tweets.lock().unwrap();
         let el = tweets.get(0).unwrap();
-        println!("{}", el);
 
-        return Ok(Response::with((status::Ok, access_token.to_string())));
+        return Ok(Response::with((status::Ok, el.to_string())));
     });
 
     Iron::new(chain).http("localhost:3000").unwrap();

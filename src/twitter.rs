@@ -2,6 +2,8 @@ extern crate rustc_serialize;
 extern crate hyper;
 
 use std::io::prelude::*;
+use std::sync::{Arc, Mutex};
+use std::collections::VecDeque;
 
 use self::hyper::client::Client;
 use self::hyper::status::StatusCode;
@@ -45,16 +47,17 @@ pub fn get_access_token<'a>(consumer_key: &'a String, consumer_secret: &'a Strin
     return None
 }
 
-pub fn get_timeline(access_token: String) {
-    let mut res = Client::new()
-        .get("https://userstream.twitter.com/1.1/user.json?with=user")
-        .header(Authorization(format!("Bearer {}", access_token)))
-        .send()
-        .unwrap();
+pub fn get_timeline(access_token: String, tweets: Arc<Mutex<VecDeque<String>>>) {
+    // let mut res = Client::new()
+    //     .get("https://userstream.twitter.com/1.1/user.json?with=user")
+    //     .header(Authorization(format!("Bearer {}", access_token)))
+    //     .send()
+    //     .unwrap();
 
-    if res.status != StatusCode::Ok {
-        return
-    }
+    // if res.status != StatusCode::Ok {
+    //     return
+    // }
 
-
+    let mut tweets = tweets.lock().unwrap();
+    tweets.push_back("hello".to_owned());
 }
