@@ -2,6 +2,10 @@ extern crate docopt;
 extern crate iron;
 extern crate rustc_serialize;
 
+use std::collections::vec_deque::VecDeque;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
 use docopt::Docopt;
 
 use iron::prelude::*;
@@ -26,19 +30,29 @@ struct Args {
     flag_consumer_secret: String,
 }
 
-
 fn main() {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.decode())
         .unwrap_or_else(|e| e.exit());
 
-    Iron::new(move |_: &mut Request| {
-        let body = twitter::get_access_token(&args.flag_consumer_key, &args.flag_consumer_secret);
+    let access_token = twitter::get_access_token(&args.flag_consumer_key, &args.flag_consumer_secret)
+        .unwrap();
 
-        if let Some(b) = body {
-            return Ok(Response::with((status::Ok, b.to_string())));
-        } else {
-            return Ok(Response::with((status::InternalServerError)));
-        }
-    }).http("localhost:3000").unwrap();
+    let tweets = Arc::new(Mutex::new(VecDeque::new()));
+    let writer = tweets.clone();
+
+    thread::spawn(move || {
+        let mut tweets = writer.lock().unwrap();
+        tweets.push_back("hello".to_owned());
+    });
+
+    let chain = Chain::new(move |_: &mut Request| {
+        let tweets = tweets.lock().unwrap();
+        let el = tweets.get(0).unwrap();
+        println!("{}", el);
+
+        return Ok(Response::with((status::Ok, access_token.to_string())));
+    });
+
+    Iron::new(chain).http("localhost:3000").unwrap();
 }

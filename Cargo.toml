@@ -6,5 +6,5 @@ authors = ["Joshua Hawxwell <m@hawx.me>"]
 [dependencies]
 rustc-serialize = "0.3"
 docopt = "0.6"
-iron = "*"
 hyper = "*"
+iron = "*"

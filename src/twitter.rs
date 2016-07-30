@@ -11,7 +11,7 @@ use self::hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use self::rustc_serialize::base64::{ToBase64, STANDARD};
 use self::rustc_serialize::json::Json;
 
-pub fn get_access_token<'a>(consumer_key: &'a String, consumer_secret: &'a str) -> Option<String> {
+pub fn get_access_token<'a>(consumer_key: &'a String, consumer_secret: &'a String) -> Option<String> {
     let bearer_token_credentials = (format!("{}:{}", consumer_key, consumer_secret)).as_bytes().to_base64(STANDARD);
 
     let mut res = Client::new()
@@ -45,16 +45,16 @@ pub fn get_access_token<'a>(consumer_key: &'a String, consumer_secret: &'a str) 
     return None
 }
 
-// pub fn get_timeline(access_token: str) {
-//     let mut res = Client::new()
-//         .get("https://userstream.twitter.com/1.1/user.json?with=user")
-//         .header(Authorization(format!("Bearer {}", access_token)))
-//         .send()
-//         .unwrap();
+pub fn get_timeline(access_token: String) {
+    let mut res = Client::new()
+        .get("https://userstream.twitter.com/1.1/user.json?with=user")
+        .header(Authorization(format!("Bearer {}", access_token)))
+        .send()
+        .unwrap();
 
-//     if res.status != StatusCode::Ok {
-//         return
-//     }
+    if res.status != StatusCode::Ok {
+        return
+    }
 
 
-// }
+}
