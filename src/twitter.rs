@@ -1,6 +1,7 @@
 extern crate hyper;
 extern crate oauth_client as oauth;
 extern crate rustc_serialize;
+extern crate time;
 
 use std::io::BufReader;
 use std::io::prelude::*;
@@ -15,6 +16,8 @@ use self::hyper::header::Authorization;
 use self::oauth::Token;
 
 use self::rustc_serialize::json::Json;
+
+use self::time::Tm;
 
 const SAMPLE_STREAM: &'static str = "https://stream.twitter.com/1.1/statuses/sample.json";
 
@@ -63,7 +66,7 @@ pub fn create_token<'a>(consumer_key: String, consumer_secret: String) -> Token<
     Token::new(consumer_key, consumer_secret)
 }
 
-pub fn get_timeline(consumer: &Token, access: &Token, tweets: Arc<Mutex<VecDeque<String>>>) {
+pub fn get_timeline(consumer: &Token, access: &Token, tweets: Arc<Mutex<VecDeque<Tweet>>>) {
     let header = oauth::authorization_header("GET", SAMPLE_STREAM, &consumer, Some(access), None);
 
     let resp = Client::new()
@@ -84,8 +87,18 @@ pub fn get_timeline(consumer: &Token, access: &Token, tweets: Arc<Mutex<VecDeque
                     tweets.pop_front();
                 }
 
-                tweets.push_back(txt.as_string().unwrap().to_owned());
+                tweets.push_back(Tweet {
+                    text: txt.as_string().unwrap().to_owned(),
+                    link: "hey".to_owned(),
+                    created_at: self::time::now()
+                });
             }
         }
     }
+}
+
+pub struct Tweet {
+    pub link: String,
+    pub text: String,
+    pub created_at: Tm
 }

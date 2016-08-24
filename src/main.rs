@@ -1,6 +1,7 @@
 extern crate docopt;
 extern crate iron;
 extern crate rustc_serialize;
+extern crate time;
 
 #[macro_use]
 extern crate horrorshow;
@@ -44,6 +45,9 @@ fn main() {
         .and_then(|d| d.decode())
         .unwrap_or_else(|e| e.exit());
 
+    let title = "tw-feed";
+    let link = "http://example.com";
+
     let tweets = Arc::new(Mutex::new(VecDeque::new()));
     let writer = tweets.clone();
 
@@ -57,42 +61,26 @@ fn main() {
     let chain = Chain::new(move |_: &mut Request| {
         let tweets = tweets.lock().unwrap();
 
-        /*
-        <?xml version="1.0" encoding="UTF-8"?><rss version="2.0">
-          <channel>
-            <title>tw-linkfeed</title>
-            <link>http://tw-linkfeed.hawx.me/feed</link>
-            <description></description>
-            <pubDate>24 Aug 16 13:51 EDT</pubDate>
-            <item>
-              <title>Italy earthquake: Death toll rises to at least 120 - BBC NewsBBC News</title>
-              <link>http://bbc.in/2bMtsoU</link>
-              <description>RT @BBCBreaking: Italy earthquake latest:&#xA;- At least 120 people dead &#xA;- Magnitude 6.2&#xA;- Three-quarters of Amatrice town destroyed&#xA;https://tâ€¦</description>
-              <pubDate>24 Aug 16 17:31 UTC</pubDate>
-            </item>
-        */
-
         let body = html! {
             rss(version="2.0") {
                 channel {
-                    title { : "tw-linkfeed" }
-                    link { : "https://feed.hawx.me/tw-linkfeed" }
-                    description { : "" }
-                    pubDate { : "" }
+                    title { : title }
+                    link { : link }
+                    pubDate { : format_args!("{}", time::now().rfc822()) }
 
                     @ for tweet in tweets.iter() {
                         item {
-                            title { : tweet }
-                            link { : "" }
-                            description { : format_args!("{}", tweet) }
-                            pubDate { : "" }
+                            link { : tweet.link.to_string() }
+                            description { : tweet.text.to_string() }
+                            pubDate { : format_args!("{}", tweet.created_at.rfc822()) }
                         }
                     }
                 }
             }
         }.into_string().unwrap();
 
-        Ok(Response::with((status::Ok, body)))
+        Ok(Response::with((status::Ok,
+                           format!("<!xml version=\"1.0\" encoding=\"utf-8\"?>{}", body))))
     });
 
     println!("Running on http://localhost:3000");
