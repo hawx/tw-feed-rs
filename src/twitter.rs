@@ -15,11 +15,29 @@ use self::hyper::header::Authorization;
 
 use self::oauth::Token;
 
-use self::rustc_serialize::json::Json;
+use self::rustc_serialize::{Decodable, Decoder};
+use self::rustc_serialize::json;
+use self::rustc_serialize::json::DecodeResult;
 
 use self::time::Tm;
 
 const SAMPLE_STREAM: &'static str = "https://stream.twitter.com/1.1/statuses/sample.json";
+
+struct TmWrapper {
+    time: Tm
+}
+
+impl Decodable for TmWrapper {
+    fn decode<D: Decoder>(d: &mut D) -> Result<Self, D::Error> {
+        let r = try!(d.read_str());
+        let f = "%a %b %e %H:%M:%S %z %Y";
+
+        match time::strptime(&r, f) {
+            Ok(t) => Ok(TmWrapper { time: t }),
+            Err(_) => Err(d.error(&format!("could not parse time: {}", r)))
+        }
+    }
+}
 
 trait JsonObjectStreamer: Sized {
     fn json_objects(&mut self) -> JsonObjects<Self>;
@@ -37,9 +55,9 @@ struct JsonObjects<'a, B> where B: 'a {
 
 impl<'a, B> Iterator for JsonObjects<'a, B> where B: BufRead + 'a {
 
-    type Item = Json;
+    type Item = Option<Decoded>;
 
-    fn next(&mut self) -> Option<Json> {
+    fn next(&mut self) -> Option<Option<Decoded>> {
         let mut buf: Vec<u8> = Vec::new();
 
         let _ = self.reader.read_until(b'\r', &mut buf);
@@ -58,8 +76,25 @@ impl<'a, B> Iterator for JsonObjects<'a, B> where B: BufRead + 'a {
             Err(_)   => return None
         };
 
-        Json::from_str(line).ok()
+        let decoded: DecodeResult<Decoded> = json::decode(line);
+        match decoded {
+            Ok(r) => Some(Some(r)),
+            Err(_) => Some(None)
+        }
     }
+}
+
+#[derive(RustcDecodable)]
+struct Decoded {
+    id: i64,
+    text: String,
+    created_at: TmWrapper,
+    user: User
+}
+
+#[derive(RustcDecodable)]
+struct User {
+    screen_name: String
 }
 
 pub fn create_token<'a>(consumer_key: String, consumer_secret: String) -> Token<'a> {
@@ -81,16 +116,16 @@ pub fn get_timeline(consumer: &Token, access: &Token, tweets: Arc<Mutex<VecDeque
         }
 
         for obj in BufReader::new(res).json_objects() {
-            if let Some(txt) = obj.as_object().unwrap().get("text") {
+            if let Some(tweet) = obj {
                 let mut tweets = tweets.lock().unwrap();
                 if tweets.len() > 20 {
                     tweets.pop_front();
                 }
 
                 tweets.push_back(Tweet {
-                    text: txt.as_string().unwrap().to_owned(),
-                    link: "hey".to_owned(),
-                    created_at: self::time::now()
+                    text: tweet.text,
+                    link: format!("https://twitter.com/{}/status/{}", tweet.user.screen_name, tweet.id),
+                    created_at: tweet.created_at.time
                 });
             }
         }

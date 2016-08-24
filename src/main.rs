@@ -66,13 +66,13 @@ fn main() {
                 channel {
                     title { : title }
                     link { : link }
-                    pubDate { : format_args!("{}", time::now().rfc822()) }
+                    pubDate { : format_args!("{}", time::now().rfc822z()) }
 
                     @ for tweet in tweets.iter() {
                         item {
                             link { : tweet.link.to_string() }
                             description { : tweet.text.to_string() }
-                            pubDate { : format_args!("{}", tweet.created_at.rfc822()) }
+                            pubDate { : format_args!("{}", tweet.created_at.rfc822z()) }
                         }
                     }
                 }
