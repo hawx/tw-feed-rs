@@ -1,63 +1,91 @@
-extern crate rustc_serialize;
 extern crate hyper;
+extern crate oauth_client as oauth;
+extern crate rustc_serialize;
 
+use std::io::BufReader;
 use std::io::prelude::*;
+use std::str;
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 
 use self::hyper::client::Client;
 use self::hyper::status::StatusCode;
-use self::hyper::header::{Authorization, ContentType};
-use self::hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
+use self::hyper::header::Authorization;
 
-use self::rustc_serialize::base64::{ToBase64, STANDARD};
+use self::oauth::Token;
+
 use self::rustc_serialize::json::Json;
 
-pub fn get_access_token<'a>(consumer_key: &'a String, consumer_secret: &'a String) -> Option<String> {
-    let bearer_token_credentials = (format!("{}:{}", consumer_key, consumer_secret)).as_bytes().to_base64(STANDARD);
+const SAMPLE_STREAM: &'static str = "https://stream.twitter.com/1.1/statuses/sample.json";
 
-    let mut res = Client::new()
-        .post("https://api.twitter.com/oauth2/token")
-        .body("grant_type=client_credentials")
-        .header(Authorization(format!("Basic {}", bearer_token_credentials)))
-        .header(ContentType(Mime(TopLevel::Application, SubLevel::WwwFormUrlEncoded,
-                                 vec![(Attr::Charset, Value::Utf8)])))
-        .send()
-        .unwrap();
+trait JsonObjectStreamer: Sized {
+    fn json_objects(&mut self) -> JsonObjects<Self>;
+}
 
-    if res.status != StatusCode::Ok {
-        return None
+impl<T: BufRead> JsonObjectStreamer for T {
+    fn json_objects(&mut self) -> JsonObjects<T> {
+        JsonObjects { reader: self }
     }
+}
 
-    let mut buffer = String::new();
-    let _ = res.read_to_string(&mut buffer);
+struct JsonObjects<'a, B> where B: 'a {
+    reader: &'a mut B
+}
 
-    if let Ok(data) = Json::from_str(&buffer) {
-        if let Some(obj) = data.as_object() {
-            if let Some(token_type) = obj.get("token_type").and_then(|x| x.as_string())  {
-                if token_type == "bearer" {
-                    if let Some(access_token) = obj.get("access_token").and_then(|x| x.as_string()) {
-                        return Some(access_token.to_owned());
-                    }
+impl<'a, B> Iterator for JsonObjects<'a, B> where B: BufRead + 'a {
+
+    type Item = Json;
+
+    fn next(&mut self) -> Option<Json> {
+        let mut buf: Vec<u8> = Vec::new();
+
+        let _ = self.reader.read_until(b'\r', &mut buf);
+
+        if buf.last() == Some(&b'\r') {
+            buf.pop();
+            let mut b: String = String::new();
+            match self.reader.read_line(&mut b) {
+                Ok(_)  => (),
+                Err(_) => return None,
+            }
+        }
+
+        let line = match str::from_utf8(&buf) {
+            Ok(line) => line,
+            Err(_)   => return None
+        };
+
+        Json::from_str(line).ok()
+    }
+}
+
+pub fn create_token<'a>(consumer_key: String, consumer_secret: String) -> Token<'a> {
+    Token::new(consumer_key, consumer_secret)
+}
+
+pub fn get_timeline(consumer: &Token, access: &Token, tweets: Arc<Mutex<VecDeque<String>>>) {
+    let header = oauth::authorization_header("GET", SAMPLE_STREAM, &consumer, Some(access), None);
+
+    let resp = Client::new()
+        .get(SAMPLE_STREAM)
+        .header(Authorization(header))
+        .send();
+
+    if let Ok(res) = resp {
+        if res.status != StatusCode::Ok {
+            println!("Got status code {}", res.status);
+            return
+        }
+
+        for obj in BufReader::new(res).json_objects() {
+            if let Some(txt) = obj.as_object().unwrap().get("text") {
+                let mut tweets = tweets.lock().unwrap();
+                if tweets.len() > 20 {
+                    tweets.pop_front();
                 }
+
+                tweets.push_back(txt.as_string().unwrap().to_owned());
             }
         }
     }
-
-    return None
-}
-
-pub fn get_timeline(access_token: String, tweets: Arc<Mutex<VecDeque<String>>>) {
-    // let mut res = Client::new()
-    //     .get("https://userstream.twitter.com/1.1/user.json?with=user")
-    //     .header(Authorization(format!("Bearer {}", access_token)))
-    //     .send()
-    //     .unwrap();
-
-    // if res.status != StatusCode::Ok {
-    //     return
-    // }
-
-    let mut tweets = tweets.lock().unwrap();
-    tweets.push_back("hello".to_owned());
 }
