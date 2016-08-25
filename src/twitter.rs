@@ -13,7 +13,7 @@ use self::hyper::client::Client;
 use self::hyper::status::StatusCode;
 use self::hyper::header::Authorization;
 
-use self::oauth::Token;
+use self::oauth::{Token, ParamList};
 
 use self::rustc_serialize::{Decodable, Decoder};
 use self::rustc_serialize::json;
@@ -22,6 +22,7 @@ use self::rustc_serialize::json::{DecodeResult, Json};
 use self::time::Tm;
 
 const STREAM_URL: &'static str = "https://userstream.twitter.com/1.1/user.json";
+const USER_URL: &'static str = "https://userstream.twitter.com/1.1/user.json?with=user";
 const DETAILS_URL: &'static str = "https://api.twitter.com/1.1/account/verify_credentials.json";
 
 struct TmWrapper {
@@ -100,16 +101,19 @@ pub fn create_token<'a>(key: String, secret: String) -> Token<'a> {
 }
 
 pub fn get_timeline(consumer: &Token, access: &Token, tweets: Arc<Mutex<VecDeque<Tweet>>>) {
-    let header = oauth::authorization_header("GET", STREAM_URL, &consumer, Some(access), None);
+    let mut params = ParamList::new();
+    params.insert("with".into(), "user".into());
+
+    let header = oauth::authorization_header("GET", STREAM_URL, &consumer, Some(access), Some(&params));
 
     let resp = Client::new()
-        .get(STREAM_URL)
+        .get(USER_URL)
         .header(Authorization(header))
         .send();
 
     if let Ok(res) = resp {
         if res.status != StatusCode::Ok {
-            println!("Got status code {}", res.status);
+            println!("get_timeline got status code {}", res.status);
             return
         }
 
@@ -146,7 +150,7 @@ pub fn get_details(consumer: &Token, access: &Token) -> Option<Details> {
         .ok()
         .and_then(|mut res| {
             if res.status != StatusCode::Ok {
-                println!("Got status code {}", res.status);
+                println!("get_details got status code {}", res.status);
                 return None
             }
 

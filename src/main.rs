@@ -26,20 +26,20 @@ const USAGE: &'static str = "
 Twitter feed.
 
 Usage:
-  feed --consumer-key=<key> --consumer-secret=<secret> --access-key=<key> --access-secret=<secret>
+  feed --consumer-key=<value> --consumer-secret=<value> --access-token=<value> --access-secret=<value>
 
 Options:
-  --consumer-key=<key>          Consumer key
-  --consumer-secret=<secret>    Consumer secret
-  --access-key=<key>            Access key
-  --access-secret=<secret>      Access secret
+  --consumer-key=<value>          Consumer key
+  --consumer-secret=<value>       Consumer secret
+  --access-token=<value>          Access token
+  --access-secret=<value>         Access secret
 ";
 
 #[derive(Debug, RustcDecodable)]
 struct Args {
     flag_consumer_key: String,
     flag_consumer_secret: String,
-    flag_access_key: String,
+    flag_access_token: String,
     flag_access_secret: String
 }
 
@@ -56,7 +56,7 @@ fn main() {
     let writer = tweets.clone();
 
     let consumer = twitter::create_token(args.flag_consumer_key, args.flag_consumer_secret);
-    let access = twitter::create_token(args.flag_access_key, args.flag_access_secret);
+    let access = twitter::create_token(args.flag_access_token, args.flag_access_secret);
 
     let details = twitter::get_details(&consumer, &access).unwrap();
 
