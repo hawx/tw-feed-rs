@@ -17,11 +17,12 @@ use self::oauth::Token;
 
 use self::rustc_serialize::{Decodable, Decoder};
 use self::rustc_serialize::json;
-use self::rustc_serialize::json::DecodeResult;
+use self::rustc_serialize::json::{DecodeResult, Json};
 
 use self::time::Tm;
 
-const SAMPLE_STREAM: &'static str = "https://stream.twitter.com/1.1/statuses/sample.json";
+const STREAM_URL: &'static str = "https://userstream.twitter.com/1.1/user.json";
+const DETAILS_URL: &'static str = "https://api.twitter.com/1.1/account/verify_credentials.json";
 
 struct TmWrapper {
     time: Tm
@@ -77,10 +78,7 @@ impl<'a, B> Iterator for JsonObjects<'a, B> where B: BufRead + 'a {
         };
 
         let decoded: DecodeResult<Decoded> = json::decode(line);
-        match decoded {
-            Ok(r) => Some(Some(r)),
-            Err(_) => Some(None)
-        }
+        Some(decoded.ok())
     }
 }
 
@@ -97,15 +95,15 @@ struct User {
     screen_name: String
 }
 
-pub fn create_token<'a>(consumer_key: String, consumer_secret: String) -> Token<'a> {
-    Token::new(consumer_key, consumer_secret)
+pub fn create_token<'a>(key: String, secret: String) -> Token<'a> {
+    Token::new(key, secret)
 }
 
 pub fn get_timeline(consumer: &Token, access: &Token, tweets: Arc<Mutex<VecDeque<Tweet>>>) {
-    let header = oauth::authorization_header("GET", SAMPLE_STREAM, &consumer, Some(access), None);
+    let header = oauth::authorization_header("GET", STREAM_URL, &consumer, Some(access), None);
 
     let resp = Client::new()
-        .get(SAMPLE_STREAM)
+        .get(STREAM_URL)
         .header(Authorization(header))
         .send();
 
@@ -136,4 +134,36 @@ pub struct Tweet {
     pub link: String,
     pub text: String,
     pub created_at: Tm
+}
+
+pub fn get_details(consumer: &Token, access: &Token) -> Option<Details> {
+    let header = oauth::authorization_header("GET", DETAILS_URL, &consumer, Some(access), None);
+
+    Client::new()
+        .get(DETAILS_URL)
+        .header(Authorization(header))
+        .send()
+        .ok()
+        .and_then(|mut res| {
+            if res.status != StatusCode::Ok {
+                println!("Got status code {}", res.status);
+                return None
+            }
+
+            let json = match Json::from_reader(&mut res) {
+                Ok(x) => x,
+                Err(_) => return None
+            };
+
+            let mut decoder = json::Decoder::new(json);
+            let decoded: DecodeResult<Details> = Decodable::decode(&mut decoder);
+
+            decoded.ok()
+        })
+}
+
+#[derive(RustcDecodable)]
+pub struct Details {
+    pub name: String,
+    pub screen_name: String,
 }
